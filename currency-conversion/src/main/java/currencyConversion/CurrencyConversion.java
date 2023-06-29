@@ -1,46 +1,31 @@
-package currencyExchange;
+package currencyConversion;
 
 import java.math.BigDecimal;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Transient;
+public class CurrencyConversion {
 
-@Entity
-public class CurrencyExchange {
-
-	@Id
-	private long id;
-	
-	@Column(name = "currency_from")
+	// atributi kao kod CurrencyExchange klase
 	private String from;
-	
-	@Column(name = "currency_to")
 	private String to;
 	private BigDecimal conversionMultiple;
-	
-	@Transient
 	private String environment;
 
-	public CurrencyExchange() {
-		
+	// Specificno za CurrencyConversion
+	private BigDecimal conversionTotal;
+	private Double quantity;
+
+	public CurrencyConversion() {
+
 	}
-	
-	public CurrencyExchange(long id, String from, String to, BigDecimal conversionMultiple, String environment) {
-		this.id = id;
+
+	public CurrencyConversion(String from, String to, BigDecimal conversionMultiple, String environment,
+			Double quantity, BigDecimal conversionTotal) {
 		this.from = from;
 		this.to = to;
 		this.conversionMultiple = conversionMultiple;
 		this.environment = environment;
-	}
-
-	public long getId() {
-		return id;
-	}
-
-	public void setId(long id) {
-		this.id = id;
+		this.conversionTotal = conversionTotal;
+		this.quantity = quantity;
 	}
 
 	public String getFrom() {
@@ -73,6 +58,22 @@ public class CurrencyExchange {
 
 	public void setEnvironment(String environment) {
 		this.environment = environment;
+	}
+
+	public BigDecimal getConversionTotal() {
+		return conversionTotal;
+	}
+
+	public void setConversionTotal(BigDecimal conversionTotal) {
+		this.conversionTotal = conversionTotal;
+	}
+
+	public Double getQuantity() {
+		return quantity;
+	}
+
+	public void setQuantity(Double quantity) {
+		this.quantity = quantity;
 	}
 
 }
