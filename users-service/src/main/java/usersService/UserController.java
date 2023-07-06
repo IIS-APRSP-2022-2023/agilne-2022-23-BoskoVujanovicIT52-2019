@@ -46,23 +46,27 @@ public class UserController {
 	@PostMapping("/users-service/users")
 	public ResponseEntity<?> createUser(@RequestBody CustomUser user, @RequestHeader("Authorization") String authorization) {
 		String email = getEmail(authorization);
-
+		//iako smo proverili u customUser.java klasi, dodatna provera da je role== jedna od 3 dozvoljene vrednosti.
 		if (!user.getRole().equals("OWNER") && !user.getRole().equals("USER") && !user.getRole().equals("ADMIN"))
 			return ResponseEntity.status(400).body("Allowed values for role are USER, ADMIN and OWNER");
-
+		//ako pravimo novog usera, proverimo da li je email vec u upotrebi
 		if (repo.existsByEmail(user.getEmail()))
 			return ResponseEntity.status(400).body("Already exists user with email " + user.getEmail());
-
+				
+		//da li je podnosliac zahteva admin, i da li dodaje usera?
 		if (repo.existsByEmailAndRole(email, "ADMIN") && !user.getRole().equalsIgnoreCase("USER"))
 			return ResponseEntity.status(403).body("You can only add user with USER role");
-
+		//ako dodajem ownera, da li owner vec postoji? uslov je da imamo samo 1 ownera u bazi
 		if (user.getRole().equals("OWNER")) {
 			boolean ownerExists = repo.existsByRole("OWNER");
 			if (ownerExists) {
 				return ResponseEntity.status(409).body("Already exists user with OWNER role");
 			}
 		}
+		//ako smo prosli sve ifove i dozvoljeno je, pomocu repozitorijuma koristimo save funkciju 
+		//i prosledimo usera koji je prosledjen u body-ju
 		CustomUser createdUser = repo.save(user);
+		//status uspesno izvrseno + podaci o kreiranom useru.
 		return ResponseEntity.status(201).body(createdUser);
 	}
 
