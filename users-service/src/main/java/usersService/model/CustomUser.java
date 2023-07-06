@@ -14,7 +14,7 @@ public class CustomUser {
 	private String email;
 	@Column(nullable = false)
 	private String password;
-	@Column(nullable = false, columnDefinition = "VARCHAR(20) CHECK(role IN('ADMIN','USER'))")
+	@Column(nullable = false, columnDefinition = "VARCHAR(20) CHECK(role IN('ADMIN','USER','OWNER'))")
 	private String role;
 
 	
@@ -38,7 +38,7 @@ public class CustomUser {
 	public void setEmail(String email) {
 		this.email = email;
 	}
-
+ 
 	public String getPassword() {
 		return password;
 	}

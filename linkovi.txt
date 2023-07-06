@@ -1,0 +1,9 @@
+- api gateway: http://localhost:8765
+- naming-server: http://localhost:8761
+- users-service: http://localhost:8770/users-service
+- bank-account: http://localhost:8300/bank-account
+- currency-exchange: http://localhost:8000/currency-exchange
+- currency-conversion: http://localhost:8100/currency-conversion
+- crypto-wallet: http://localhost:8300/crypto-wallet
+- crypto-conversion: http://localhost:8500/crypto-conversion
+- crypto-exchange: http://localhost:8400/crypto-exchange

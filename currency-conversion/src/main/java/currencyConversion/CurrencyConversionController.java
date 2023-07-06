@@ -1,7 +1,8 @@
 package currencyConversion;
 
 import java.math.BigDecimal;
-import java.util.HashMap;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -9,80 +10,71 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.RestTemplate;
 
-import feign.FeignException;
+import DTO.BankAccountDTO;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
+import io.github.resilience4j.retry.annotation.Retry;
 
 @RestController
 public class CurrencyConversionController {
-	
-	@Autowired
+
+    @Autowired
 	private CurrencyExchangeProxy proxy;
 
-	//localhost:8100/currency-conversion/from/EUR/to/RSD/quantity/100
-	@GetMapping("/currency-conversion/from/{from}/to/{to}/quantity/{quantity}")
-	public CurrencyConversion getConversion
-		(@PathVariable String from, @PathVariable String to, @PathVariable double quantity) {
-		
-		HashMap<String,String> uriVariables = new HashMap<String,String>();
-		uriVariables.put("from", from);
-		uriVariables.put("to", to);
-		
-		ResponseEntity<CurrencyConversion> response = 
-				new RestTemplate().
-				getForEntity("http://localhost:8000/currency-exchange/from/{from}/to/{to}",
-						CurrencyConversion.class, uriVariables);
-		
-		CurrencyConversion cc = response.getBody();
-		
-		return new CurrencyConversion(from,to,cc.getConversionMultiple(), cc.getEnvironment(), quantity,
-				cc.getConversionMultiple().multiply(BigDecimal.valueOf(quantity)));
+    @Autowired
+    private BankAccountProxy bankAccountProxy;
+
+    //localhost:8100/currency-conversion?from=EUR&to=RSD&quantity=50 - request example
+	@GetMapping("/currency-conversion") 
+    @Retry(name = "default", fallbackMethod = "response") 
+    @RateLimiter(name = "default")
+    public ResponseEntity<?> getConversionParams
+        (@RequestParam String from, @RequestParam String to, @RequestParam(defaultValue = "10") double quantity, 
+        @RequestHeader("Authorization") String authorization) {
+
+		String email = getEmail(authorization);
+
+            ResponseEntity<CurrencyConversion> response = proxy.getExchange(from, to);
+
+            CurrencyConversion responseBody = response.getBody(); // the response contains ToValue and Environment
+
+            // request to bank account service
+            BankAccountDTO accountDto = new BankAccountDTO(email, from, to, BigDecimal.valueOf(quantity), 
+                responseBody.getToValue().multiply(BigDecimal.valueOf(quantity)));
+
+            ResponseEntity<?> responseBank = bankAccountProxy.conversion(accountDto);
+
+            return ResponseEntity.status(HttpStatus.OK).body(responseBank.getBody());
+
 	}
-	
-	//localhost:8100/currency-conversion?from=EUR&to=RSD&quantity=50
-	@GetMapping("/currency-conversion")
-	public ResponseEntity<?> getConversionParams(@RequestParam String from, @RequestParam String to, @RequestParam double quantity) {
-		
-		HashMap<String,String> uriVariable = new HashMap<String, String>();
-		uriVariable.put("from", from);
-		uriVariable.put("to", to);
-		
-		try {
-		ResponseEntity<CurrencyConversion> response = new RestTemplate().
-				getForEntity("http://localhost:8000/currency-exchange/from/{from}/to/{to}", CurrencyConversion.class, uriVariable);
-		CurrencyConversion responseBody = response.getBody();
-		return ResponseEntity.status(HttpStatus.OK).body(new CurrencyConversion(from,to,responseBody.getConversionMultiple(),responseBody.getEnvironment(),
-				quantity, responseBody.getConversionMultiple().multiply(BigDecimal.valueOf(quantity))));
-		}
-		catch(HttpClientErrorException e) {
-			return ResponseEntity.status(e.getStatusCode()).body(e.getMessage());
-		}
+
+    private String getEmail(String authorization) {
+		// Extract the username and password from the Authorization header
+		String base64Credentials = authorization.substring("Basic".length()).trim();
+		byte[] decoded = Base64.getDecoder().decode(base64Credentials);
+		String credentials = new String(decoded, StandardCharsets.UTF_8);
+		String[] emailPassword = credentials.split(":", 2);
+		String email = emailPassword[0];
+		return email;
 	}
-	
-	//localhost:8100/currency-conversion-feign?from=EUR&to=RSD&quantity=50
-	@GetMapping("/currency-conversion-feign")
-	public ResponseEntity<?> getConversionFeign(@RequestParam String from, @RequestParam String to, @RequestParam double quantity){
-		
-		try {
-			ResponseEntity<CurrencyConversion> response = proxy.getExchange(from, to);
-			CurrencyConversion responseBody = response.getBody();
-			return ResponseEntity.ok(new CurrencyConversion(from,to,responseBody.getConversionMultiple(),responseBody.getEnvironment()+" feign",
-				quantity, responseBody.getConversionMultiple().multiply(BigDecimal.valueOf(quantity))));
-		}catch(FeignException e) {
-			return ResponseEntity.status(e.status()).body(e.getMessage());
-		}
-	}
-	
-	@ExceptionHandler(MissingServletRequestParameterException.class)
+
+    //handles error if there is missing parameter
+    @ExceptionHandler(MissingServletRequestParameterException.class)
 	public ResponseEntity<String> handleMissingParams(MissingServletRequestParameterException ex) {
 	    String parameter = ex.getParameterName();
-	    //return ResponseEntity.status(ex.getStatusCode()).body(ex.getMessage());
 	    return ResponseEntity.status(ex.getStatusCode()).body("Value [" + ex.getParameterType() + "] of parameter [" + parameter + "] has been ommited");
 	}
-	
-	
+
+    @ExceptionHandler(RequestNotPermitted.class)
+    public ResponseEntity<String> rateLimiterExceptionHandler(RequestNotPermitted ex) {
+        return ResponseEntity.status(503).body("Currency conversion service can only serve up to 2 requests every 45 seconds");
+    }
+
+    public String response(Exception ex) {
+		return "Service is currently unavailable";
+    }
 }
